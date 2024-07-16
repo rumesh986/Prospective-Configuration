@@ -22,7 +22,7 @@ config:
 
     batch_size: 1
 
-    num_batch_per_iteration: 100
+    num_batch_per_iteration: 1000
 
     before_DatasetLearningTrainable_setup_code: |-
         def data_loader_fn(dataset, train, batch_size):
@@ -57,8 +57,6 @@ config:
             do: "['predict']"
     
     predictive_coding: True
-
-    T: 128
 
     PCTrainer_kwargs:
         # T: "self.config['T'] if self.config['predictive_coding'] else 1"
@@ -118,8 +116,18 @@ config:
     predict_code: |-
         self.model.eval()   #set model to eval mode (opposite of self.model.train(), doesnt actually do anything)
         prediction = self.model(data)
-        print(f"PREDICTION MADE: {prediction}")
         self.classification_error = utils.get_classification_error(prediction, target)
+
+        total_runs = prediction.size()[0]
+        correct_predictions = 0
+        for i in range(total_runs):
+            pred_val = torch.argmax(prediction[i])
+            target_val = torch.argmax(target[i])
+            print(f"Target: {target_val}, Prediciton: {pred_val}")
+            if target_val == pred_val:
+                correct_predictions += 1
+        
+        print(f"{correct_predictions}/{total_runs} | accuract = {correct_predictions/total_runs} | err = {self.classification_error}")
     
     train_on_batch_kwargs:
         is_log_progress: True

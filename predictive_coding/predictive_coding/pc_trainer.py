@@ -401,6 +401,11 @@ class PCTrainer(object):
                         ),
                         category=RuntimeWarning
                     )
+    
+    def get_model_linears(self):
+        for module in self._model.modules():
+            if isinstance(module, nn.Linear):
+                yield module
 
     def get_num_pc_layers(self) -> int:
         """Computes the total number of :class:`pc_layer.PCLayer contained by the trained model."""
@@ -454,16 +459,25 @@ class PCTrainer(object):
             "t": [],
             "value": [],
         }
-        self._del_weight_norms = {
-            "h": [],
-            "layer-0": [],
-            "layer-1": [],
-        }
+        # self._del_weight_norms = {
+        #     "h": [],
+        #     "layer-0": [],
+        #     "layer-1": [],
+        # }
         # i = 0
         # for layer in self.get_model_xs():
         #     print(i)
         #     self._del_weight_norms[f"layer-{i}"] = []
         #     i += 1
+
+        self._del_weight_norms = {
+            "h": [],
+        }
+        i = 0
+        for layer in self.get_model_linears():
+            self._del_weight_norms[f"layer-{i}"] = []
+            i += 1
+
         print(self._del_weight_norms)
         
 
@@ -984,8 +998,8 @@ class PCTrainer(object):
                 i = 0
                 # d = {'h': self._h}
                 self._del_weight_norms["h"].append(self._h)
-                for layer in self.get_model_xs():
-                    self._del_weight_norms[f"layer-{i}"].append(torch.linalg.norm(layer.grad).item())
+                for layer in self.get_model_linears():
+                    self._del_weight_norms[f"layer-{i}"].append(torch.linalg.norm(layer.weight.grad).item())
                     # d[f"layer-{i}"] = torch.linalg.norm(layer.grad).item()
                     i += 1
 

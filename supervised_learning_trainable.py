@@ -71,7 +71,7 @@ class SupervisedLearningTrainable(DatasetLearningTrainable):
         data, target = batch
 
         if do_key == 'predict':
-
+            print("########## ITS TRYING TO PREDICTT ASFUHBEDHBKJRHBG #################")
             exec(self.config.get("predict_code", "pass"))
 
         elif do_key == 'learn':

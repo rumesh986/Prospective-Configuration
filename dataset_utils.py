@@ -320,6 +320,9 @@ def partial_dateset(dataset, partial_targets=None, partial_num=-1, unlabelled_ra
 
     dataset = post_dataset(dataset)
 
+    print(dataset.targets)
+    print(torch.unique(dataset.targets).tolist())
+
     return dataset
 
 

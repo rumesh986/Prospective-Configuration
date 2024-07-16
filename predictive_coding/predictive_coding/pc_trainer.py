@@ -8,6 +8,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from datetime import datetime
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -191,6 +193,10 @@ class PCTrainer(object):
         assert isinstance(T, int)
         assert T > 0
         self._T = T
+
+
+        self.plt_dir = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")
+
 
         if self.get_is_model_has_pc_layers():
 
@@ -448,6 +454,18 @@ class PCTrainer(object):
             "t": [],
             "value": [],
         }
+        self._del_weight_norms = {
+            "h": [],
+            "layer-0": [],
+            "layer-1": [],
+        }
+        # i = 0
+        # for layer in self.get_model_xs():
+        #     print(i)
+        #     self._del_weight_norms[f"layer-{i}"] = []
+        #     i += 1
+        print(self._del_weight_norms)
+        
 
     def train_on_batch(
         self,
@@ -805,7 +823,7 @@ class PCTrainer(object):
 
             # callback_after_backward
             if callback_after_backward is not None:
-                callback_after_backward(t, **callback_after_backward_kwargs)
+                callback_after_backward(t, self, **callback_after_backward_kwargs)
 
             # optimizer_x: step
             # x_lr_discount
@@ -893,7 +911,7 @@ class PCTrainer(object):
                         log_progress += " x_lrs: {} |".format(
                             x_lrs,
                         )
-                t_iterator.set_description(log_progress)
+                # t_iterator.set_description(log_progress)
 
             # plot_progress
             if self._is_plot_progress:
@@ -923,11 +941,11 @@ class PCTrainer(object):
 
             if (isinstance(self._plot_progress_at, str) and self._plot_progress_at == "all") or (isinstance(self._plot_progress_at, list) and len(self._plot_progress_at) > 0 and self._h == max(self._plot_progress_at)):
 
-                input(
-                    "Is plot progress at {}? (Set plot_progress_at=[] in creation of pc_trainer to disable this. )".format(
-                        self._h
-                    )
-                )
+                # input(
+                #     "Is plot progress at {}? (Set plot_progress_at=[] in creation of pc_trainer to disable this. )".format(
+                #         self._h
+                #     )
+                # )
 
                 working_home = os.environ.get('WORKING_HOME')
                 if working_home is None:
@@ -939,61 +957,95 @@ class PCTrainer(object):
                         category=RuntimeWarning
                     )
 
+
                 log_dir = os.path.join(
-                    working_home, "general-energy-nets", "plot_progress"
+                    working_home, "general-energy-nets", "plot_progress", self.plt_dir
                 )
+
+                df_dir = os.path.join(working_home, "general-energy-nets", "dfs", self.plt_dir)
 
                 if not os.path.exists(log_dir):
                     os.makedirs(log_dir)
+                
+                if not os.path.exists(df_dir):
+                    os.makedirs(df_dir)
 
                 data = pd.DataFrame(self._plot_progress)
+
+                energies = data.loc[data['key'] == "energy"].filter(['t', 'h', 'value']).rename(columns={'value': "energy"}).set_index('t')
+                losss = data.loc[data['key'] == "loss"].filter(['t', 'value']).rename(columns={'value': "loss"}).set_index('t')
+                overalls = data.loc[data['key'] == "overall"].filter(['t', 'value']).rename(columns={'value': "overall"}).set_index('t')
+
+                df = pd.concat([energies, losss, overalls], axis=1)
+
+                # calculate frobenius norm from layers
+                # get xs with self.get_model_xs
+                # then grad from xs.grad
+                i = 0
+                # d = {'h': self._h}
+                self._del_weight_norms["h"].append(self._h)
+                for layer in self.get_model_xs():
+                    self._del_weight_norms[f"layer-{i}"].append(torch.linalg.norm(layer.grad).item())
+                    # d[f"layer-{i}"] = torch.linalg.norm(layer.grad).item()
+                    i += 1
+
+                # normdf = pd.DataFrame(data=norms, columns=columns)
+                # normdf = pd.DataFrame(data=d, index=[self._h])
+                normdf = pd.DataFrame(self._del_weight_norms)
 
                 # debug
                 # pd.set_option('display.max_rows', 500)
                 # input(data)
 
-                plt.figure()
-                sns.relplot(
-                    data=data,
-                    x="t",
-                    y="value",
-                    hue="h",
-                    palette="rocket_r",
-                    col="key",
-                    kind='line',
-                    facet_kws={
-                        "sharey": False,
-                        "legend_out": False,
-                    },
-                ).set(yscale='log')
-                plt.savefig(
-                    os.path.join(
-                        log_dir, "combined-{}.png".format(self._h)
-                    )
-                )
+                data.to_csv(os.path.join(df_dir, f"data.csv"))
+                df.to_csv(os.path.join(df_dir, f"data-df.csv"))
+                normdf.to_csv(os.path.join(df_dir, f"delta_weight_norms.csv"))
+                    # f"{working_home}/general-energy-nets/dfs/data-{self._h}.csv")
+                
 
-                plt.figure()
-                sns.relplot(
-                    data=data,
-                    x="t",
-                    y="value",
-                    hue="h",
-                    row="h",
-                    palette="rocket_r",
-                    col="key",
-                    kind='line',
-                    facet_kws={
-                        "sharey": False,
-                        "legend_out": False,
-                    },
-                ).set(yscale='log')
-                plt.savefig(
-                    os.path.join(
-                        log_dir, "seperated-{}.png".format(self._h)
-                    )
-                )
 
-                plt.close()
+                # plt.figure()
+                # sns.relplot(
+                #     data=data,
+                #     x="t",
+                #     y="value",
+                #     hue="h",
+                #     palette="rocket_r",
+                #     col="key",
+                #     kind='line',
+                #     facet_kws={
+                #         "sharey": False,
+                #         "legend_out": False,
+                #     },
+                # ).set(yscale='log')
+                # plt.savefig(
+                #     os.path.join(
+                #         log_dir, "combined-{}.png".format(self._h)
+                #     )
+                # )
+
+                # plt.figure()
+                # sns.relplot(
+                #     data=data,
+                #     x="t",
+                #     y="value",
+                #     hue="h",
+                #     row="h",
+                #     palette="rocket_r",
+                #     col="key",
+                #     kind='line',
+                #     facet_kws={
+                #         "sharey": False,
+                #         "legend_out": False,
+                #     },
+                # ).set(yscale='log')
+                # plt.savefig(
+                #     os.path.join(
+                #         log_dir, "seperated-{}.png".format(self._h)
+                #     )
+                # )
+
+                # plt.close()
 
             self._h += 1
 

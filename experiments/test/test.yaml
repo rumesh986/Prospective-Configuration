@@ -4,7 +4,7 @@ resources_per_trial:
     cpu: 1
     gpu: "fit_cpu"
     # debug
-    gpu: 0
+    # gpu: 0
 stop:
     is_num_iterations_reached: 1
 checkpoint_freq: 0
@@ -165,15 +165,15 @@ config:
             data_loader: |-
                 data_loader_fn(self.config['dataset'], True, self.config['batch_size'])
             do: "['learn']"
-        test:
-            data_loader: |-
-                data_loader_fn(self.config['dataset'], False, 60)
-            do: "['predict']"
+        # test:
+        #     data_loader: |-
+        #         data_loader_fn(self.config['dataset'], False, 60)
+        #     do: "['predict']"
 
     predictive_coding:
         grid_search:
             - True
-            - False
+            # - False
 
     T: 64
 
@@ -193,11 +193,11 @@ config:
             lr:
                 grid_search:
                     # for FashionMNIST
-                    # - 0.05
+                    - 0.05
                     - 0.10
-                    # - 0.15
-                    # - 0.20
-                    # - 0.25
+                    - 0.15
+                    - 0.20
+                    - 0.25
                     - 0.30
                     # # for CIFAR10
                     # - 0.25
@@ -218,7 +218,7 @@ config:
 
         if self.config['dataset']=="CIFAR10":
             input_size = 1024
-        elif self.config['dataset']=="FashionMNIST":
+        elif self.config['dataset']=="FashionMNIST" or self.config['dataset']=="MNIST":
             input_size = 784
         else:
             raise NotImplementedError
@@ -266,17 +266,17 @@ config:
             **self.config['PCTrainer_kwargs'],
         )
 
-    predict_code: |-
-        self.model.eval()
-        prediction = self.model(data)
-        self.classification_error = utils.get_classification_error(
-            prediction, target
-        )
+    # predict_code: |-
+    #     self.model.eval()
+    #     prediction = self.model(data)
+    #     self.classification_error = utils.get_classification_error(
+    #         prediction, target
+    #     )
 
-    train_on_batch_kwargs:
-        is_log_progress: False
-        is_return_results_every_t: False
-        is_checking_after_callback_after_t: False
+    # train_on_batch_kwargs:
+    #     is_log_progress: False
+    #     is_return_results_every_t: False
+    #     is_checking_after_callback_after_t: False
 
     learn_code: |-
 
@@ -285,6 +285,7 @@ config:
             self.model.train()
 
             def loss_fn(outputs, target):
+                print(outputs)
                 return (outputs - target).pow(2).sum() * 0.5
 
             self.pc_trainer.train_on_batch(

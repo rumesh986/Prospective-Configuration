@@ -1,0 +1,162 @@
+run_or_experiment: "SupervisedLearningTrainable"
+
+resources_per_trial:
+    cpu: 8
+    # gpu: "fit_cpu"
+    gpu: 0
+stop:
+    is_num_iterations_reached: 1
+checkpoint_freq: 0
+checkpoint_at_end: False
+
+config:
+    version: 1.0
+
+    num_iterations: 1
+
+    device: "torch.device('cpu')"
+
+    seed: 698841058
+
+    dataset: FashionMNIST
+
+    batch_size: 1
+
+    num_batch_per_iteration: 100
+
+    before_DatasetLearningTrainable_setup_code: |-
+        def data_loader_fn(dataset, train, batch_size):
+            transform_list = []
+            transform_list.append(transforms.ToTensor())
+            transform_list.append(utils.transforms_flatten)
+            return DataLoader(
+                dataset_utils.partial_dateset(
+                    eval(f"datasets.{dataset}")(
+                        os.environ.get('DATA_DIR'),
+                        train=train,
+                        download=False,
+                        transform=transforms.Compose(transform_list),
+                        target_transform=transforms.Compose([transforms.Lambda(lambda idx: utils.np_idx2onehot(idx, 10))]),
+                    ),
+                    partial_targets=[1,8],
+                    partial_num=5000,
+                ),
+                batch_size=batch_size,
+                num_workers=1,
+                pin_memory=True,
+                shuffle=True
+            )
+    data_packs:
+        train:
+            data_loader: |-
+                data_loader_fn(self.config['dataset'], True, self.config['batch_size'])
+            do: "['learn']"
+        test:
+            data_loader: |-
+                data_loader_fn(self.config['dataset'], False, 60)
+            do: "['predict']"
+    
+    predictive_coding: True
+
+    T: 128
+
+    PCTrainer_kwargs:
+        # T: "self.config['T'] if self.config['predictive_coding'] else 1"
+        T: 128
+
+        update_x_at: "all"
+        # optimizer_x_fn: "optim.SGD"
+        optimizer_x_kwargs:
+            lr: 0.1
+        x_lr_discount: 0.5
+        x_lr_amplifier: 1.0
+
+        update_p_at: "last"
+        # optimizer_p_fn: eval("optim.SGD")
+        optimizer_p_kwargs:
+            lr: 0.1
+        
+        # plot_progress_at: "[]"
+        # callback_after_backward: |-
+        #     def callback_after_backward(t, **kwargs):
+        #         print(f"##### t: {t} ######")
+    
+    model_creation_code: |-
+        import predictive_coding as pc
+        import torch.optim as optim
+
+        input_size = 784
+
+        self.model = [
+            nn.Linear(input_size, 32, bias=False),
+            pc.PCLayer(),
+            nn.Sigmoid(),
+            nn.Linear(32, 32, bias=False),
+            pc.PCLayer(),
+            nn.Sigmoid(),
+            nn.Linear(32, 10, bias=False)
+        ]
+
+        for model_ in self.model:
+            if isinstance(model_, nn.Linear):
+                torch.nn.init.xavier_uniform(model_.weight, gain=1)
+        
+        self.model = nn.Sequential(*self.model).to(self.device)
+
+        self.config['PCTrainer_kwargs']['optimizer_x_fn']=eval("optim.SGD")
+        self.config['PCTrainer_kwargs']['optimizer_p_fn']=eval("optim.SGD")
+        # self.config['PCTrainer_kwargs']['plot_progress_at']=eval("[]")
+        self.config['PCTrainer_kwargs']['plot_progress_at']=eval("'all'")
+
+        # self.config['PCTrainer_kwargs']['callback_after_backward']=callback
+
+
+        # print(f"PLOT PROGRESS AT: {self.config['PCTrainer_kwargs']['plot_progress_at']} {type(self.config['PCTrainer_kwargs']['plot_progress_at'])} ########")
+
+        self.pc_trainer = pc.PCTrainer(self.model, **self.config['PCTrainer_kwargs'])
+    
+    predict_code: |-
+        self.model.eval()   #set model to eval mode (opposite of self.model.train(), doesnt actually do anything)
+        prediction = self.model(data)
+        print(f"PREDICTION MADE: {prediction}")
+        self.classification_error = utils.get_classification_error(prediction, target)
+    
+    train_on_batch_kwargs:
+        is_log_progress: True
+        is_return_results_every_t: True
+        is_checking_after_callback_after_t: False
+
+    learn_code: |-
+        if batch_idx < self.config['num_batch_per_iteration']:
+            # print(f"## LEARNING {batch_idx}")
+            # print(data.size())
+            # print(target.size())
+
+            self.model.train()  # set model in train mode (doesnt actually do any training)
+
+            # just their energy function
+            def loss_fn(outputs, target):
+                return (outputs - target).pow(2).sum() * 0.5
+            
+
+            def callback(t, selftest):
+                print(f"##### t: {t} ######")
+                # print(self.model.)
+                # for x in self.get_model_xs():
+                #     print(x)
+                model_xs = list(selftest.get_model_xs())
+                print(model_xs[0].grad)
+
+            self.pc_trainer.train_on_batch(
+                data, 
+                loss_fn, 
+                loss_fn_kwargs={'target': target},
+                # callback_after_backward=callback,
+                # callback_after_backward_kwargs={'selftest': self},
+                **self.config['train_on_batch_kwargs'],
+            )
+
+    log_packs:
+        classification_error:
+            log: "self.classification_error.item()"
+            at_data_pack: "['test']"

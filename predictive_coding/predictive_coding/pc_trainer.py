@@ -479,7 +479,17 @@ class PCTrainer(object):
             i += 1
 
         print(self._del_weight_norms)
-        
+        self._iter_counts = {
+            "h": [],
+            "t": []
+        }
+
+        self._prediction_results = {
+            "i": [],
+            "target": [],
+            "prediction": []
+        }
+
 
     def train_on_batch(
         self,
@@ -893,7 +903,7 @@ class PCTrainer(object):
 
             # log_progress
             if is_log_progress:
-                log_progress = '|'
+                log_progress = f'| {self._h} '
                 if loss is not None:
                     log_progress += " l: {:.3e} |".format(
                         loss,
@@ -925,7 +935,7 @@ class PCTrainer(object):
                         log_progress += " x_lrs: {} |".format(
                             x_lrs,
                         )
-                # t_iterator.set_description(log_progress)
+                t_iterator.set_description(log_progress)
 
             # plot_progress
             if self._is_plot_progress:
@@ -948,6 +958,7 @@ class PCTrainer(object):
 
             # <- inference
 
+        print(f"###### Relaxation ended after {t} iterations!! ######")
         # plot_progress
         if self._is_plot_progress:
 
@@ -963,7 +974,8 @@ class PCTrainer(object):
 
                 working_home = os.environ.get('WORKING_HOME')
                 if working_home is None:
-                    working_home = "~/"
+                    # working_home = "~/"
+                    working_home = "/workspaces/Prospective-Configuration"
                     warnings.warn(
                         "Please specify your working home by setting the WORKING_HOME environment variable (using absolute path if you are using ray, otherwise relative path like ~/ is fine), defaulting to {}".format(
                             working_home
@@ -1007,6 +1019,11 @@ class PCTrainer(object):
                 # normdf = pd.DataFrame(data=d, index=[self._h])
                 normdf = pd.DataFrame(self._del_weight_norms)
 
+                self._iter_counts['h'].append(self._h)
+                self._iter_counts['t'].append(t)
+
+                iterdf = pd.DataFrame(self._iter_counts)
+
                 # debug
                 # pd.set_option('display.max_rows', 500)
                 # input(data)
@@ -1014,6 +1031,7 @@ class PCTrainer(object):
                 data.to_csv(os.path.join(df_dir, f"data.csv"))
                 df.to_csv(os.path.join(df_dir, f"data-df.csv"))
                 normdf.to_csv(os.path.join(df_dir, f"delta_weight_norms.csv"))
+                iterdf.to_csv(os.path.join(df_dir, f"iters.csv"))
                     # f"{working_home}/general-energy-nets/dfs/data-{self._h}.csv")
                 
 
@@ -1064,6 +1082,19 @@ class PCTrainer(object):
             self._h += 1
 
         return results
+    
+    def save_prediction_results(self, i, target, prediction):
+        self._prediction_results["i"].append(i)
+        self._prediction_results["target"].append(target)
+        self._prediction_results["prediction"].append(prediction)
+
+        working_home = "/workspaces/Prospective-Configuration"
+        df_dir = os.path.join(working_home, "general-energy-nets", "dfs", self.plt_dir)
+        
+        df = pd.DataFrame(self._prediction_results)
+
+        df.to_csv(os.path.join(df_dir, "preds.csv"))
+
 
     #  PRIVATE METHODS  ########################################################################################################
 

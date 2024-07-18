@@ -4,5 +4,10 @@
     "containerEnv": {
         "RESULTS_DIR": "/workspaces/Prospective-Configuration/results",
         "CODE_DIR": "/workspaces/Prospective-Configuration/"
-    }
+    },
+    "runArgs": [
+        "--shm-size=2.40gb"
+        // "--gpus",
+        // "all"
+    ]
 }

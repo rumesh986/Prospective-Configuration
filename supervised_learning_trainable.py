@@ -70,13 +70,16 @@ class SupervisedLearningTrainable(DatasetLearningTrainable):
         # unpack batch
         data, target = batch
 
+        print(f"########## ITS TRYING TO {do_key} ASFUHBEDHBKJRHBG [{batch_idx}/[{self.config['num_test']} {self.config['num_batch_per_iteration']}]] #################")
+
         if do_key == 'predict':
-            print("########## ITS TRYING TO PREDICTT ASFUHBEDHBKJRHBG #################")
-            exec(self.config.get("predict_code", "pass"))
+            if batch_idx < self.config['num_test']:
+                exec(self.config.get("predict_code", "pass"))
 
         elif do_key == 'learn':
 
-            exec(self.config.get("learn_code", "pass"))
+            if batch_idx < self.config['num_batch_per_iteration']:
+                exec(self.config.get("learn_code", "pass"))
 
         else:
 

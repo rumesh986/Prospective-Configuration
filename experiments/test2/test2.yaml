@@ -3,6 +3,7 @@ run_or_experiment: "SupervisedLearningTrainable"
 resources_per_trial:
     cpu: 8
     # gpu: "fit_cpu"
+    # gpu: 1
     gpu: 0
 stop:
     is_num_iterations_reached: 1
@@ -14,18 +15,26 @@ config:
 
     num_iterations: 1
 
+    # device: "torch.device('cuda')"
     device: "torch.device('cpu')"
 
     seed: 698841058
 
     dataset: FashionMNIST
+    targets: "[1,8]"
 
     batch_size: 1
 
-    num_batch_per_iteration: 1000
+    num_batch_per_iteration: 10
+    num_test: 10
+
+    num_test_per_target: 10
+    num_train_per_target: 10
 
     before_DatasetLearningTrainable_setup_code: |-
-        def data_loader_fn(dataset, train, batch_size):
+        def data_loader_fn(dataset, train, batch_size, targets, num):
+            print(f"Loading data training: {train}")
+            targets = eval(targets)
             transform_list = []
             transform_list.append(transforms.ToTensor())
             transform_list.append(utils.transforms_flatten)
@@ -36,10 +45,10 @@ config:
                         train=train,
                         download=False,
                         transform=transforms.Compose(transform_list),
-                        target_transform=transforms.Compose([transforms.Lambda(lambda idx: utils.np_idx2onehot(idx, 10))]),
+                        target_transform=transforms.Compose([transforms.Lambda(lambda idx: utils.np_idx2onehot(targets.index(idx), len(targets)))]),
                     ),
-                    partial_targets=[1,8],
-                    partial_num=5000,
+                    partial_targets=targets,
+                    partial_num=num,
                 ),
                 batch_size=batch_size,
                 num_workers=1,
@@ -49,11 +58,11 @@ config:
     data_packs:
         train:
             data_loader: |-
-                data_loader_fn(self.config['dataset'], True, self.config['batch_size'])
+                data_loader_fn(self.config['dataset'], True, self.config['batch_size'], self.config['targets'], self.config['num_train_per_target'])
             do: "['learn']"
         test:
             data_loader: |-
-                data_loader_fn(self.config['dataset'], False, 60)
+                data_loader_fn(self.config['dataset'], False, 1, self.config['targets'], self.config['num_test_per_target'])
             do: "['predict']"
     
     predictive_coding: True
@@ -74,6 +83,10 @@ config:
         optimizer_p_kwargs:
             lr: 0.1
         
+        
+        # early_stop_condition: self._check_early_stop()
+        early_stop_condition: True if (self._optimizer_x.param_groups[0]['lr'] <= (self._x_lr_discount ** 2) * self._optimizer_x_kwargs["lr"]) else False
+        
         # plot_progress_at: "[]"
         # callback_after_backward: |-
         #     def callback_after_backward(t, **kwargs):
@@ -83,7 +96,10 @@ config:
         import predictive_coding as pc
         import torch.optim as optim
 
+        self.targets = eval(self.config['targets'])
+
         input_size = 784
+        output_size = len(self.targets)
 
         self.model = [
             nn.Linear(input_size, 32, bias=False),
@@ -92,7 +108,7 @@ config:
             nn.Linear(32, 32, bias=False),
             pc.PCLayer(),
             nn.Sigmoid(),
-            nn.Linear(32, 10, bias=False)
+            nn.Linear(32, output_size, bias=False)
         ]
 
         for model_ in self.model:
@@ -114,20 +130,25 @@ config:
         self.pc_trainer = pc.PCTrainer(self.model, **self.config['PCTrainer_kwargs'])
     
     predict_code: |-
-        self.model.eval()   #set model to eval mode (opposite of self.model.train(), doesnt actually do anything)
-        prediction = self.model(data)
-        self.classification_error = utils.get_classification_error(prediction, target)
+        print(f"{batch_idx}/{self.config['num_test']}")
+        if batch_idx < self.config['num_test']:
+            self.model.eval()   #set model to eval mode (opposite of self.model.train(), doesnt actually compute anything)
+            prediction = self.model(data)
+            self.classification_error = utils.get_classification_error(prediction, target)
 
-        total_runs = prediction.size()[0]
-        correct_predictions = 0
-        for i in range(total_runs):
-            pred_val = torch.argmax(prediction[i])
-            target_val = torch.argmax(target[i])
-            print(f"Target: {target_val}, Prediciton: {pred_val}")
-            if target_val == pred_val:
-                correct_predictions += 1
-        
-        print(f"{correct_predictions}/{total_runs} | accuract = {correct_predictions/total_runs} | err = {self.classification_error}")
+            total_runs = prediction.size()[0]
+            correct_predictions = 0
+            for i in range(total_runs):
+                pred_val = self.targets[torch.argmax(prediction[i])]
+                target_val = self.targets[torch.argmax(target[i])]
+                print(f"Target: {target_val}, Prediciton: {pred_val}")
+                if target_val == pred_val:
+                    correct_predictions += 1
+
+                self.pc_trainer.save_prediction_results(batch_idx, target_val, pred_val)            
+
+            print(f"[{batch_idx}] {correct_predictions}/{total_runs} | accuracy = {correct_predictions/total_runs} | err = {self.classification_error}")
+
     
     train_on_batch_kwargs:
         is_log_progress: True
@@ -140,7 +161,7 @@ config:
             # print(data.size())
             # print(target.size())
 
-            self.model.train()  # set model in train mode (doesnt actually do any training)
+            self.model.train()  # set model in train mode (doesnt actually compute any training)
 
             # just their energy function
             def loss_fn(outputs, target):

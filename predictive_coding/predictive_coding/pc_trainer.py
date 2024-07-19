@@ -814,7 +814,7 @@ class PCTrainer(object):
 
             # overall
             overall = []
-            if loss is not None:
+            if loss is not None and t == 0:
                 overall.append(loss)
             if energy is not None:
                 overall.append(
@@ -997,6 +997,7 @@ class PCTrainer(object):
                     os.makedirs(df_dir)
 
                 data = pd.DataFrame(self._plot_progress)
+                data = data.loc[data['h'] == self._h]
 
                 energies = data.loc[data['key'] == "energy"].filter(['t', 'h', 'value']).rename(columns={'value': "energy"}).set_index('t')
                 losss = data.loc[data['key'] == "loss"].filter(['t', 'value']).rename(columns={'value': "loss"}).set_index('t')
@@ -1004,35 +1005,47 @@ class PCTrainer(object):
 
                 df = pd.concat([energies, losss, overalls], axis=1)
 
-                # calculate frobenius norm from layers
-                # get xs with self.get_model_xs
-                # then grad from xs.grad
                 i = 0
-                # d = {'h': self._h}
+                d = {'h': self._h}
+
                 self._del_weight_norms["h"].append(self._h)
                 for layer in self.get_model_linears():
-                    self._del_weight_norms[f"layer-{i}"].append(torch.linalg.norm(layer.weight.grad).item())
+                    if layer.weight.grad is None:
+                        d[f"layer-{i}"] = -1.0
+                    else:
+                        d[f"layer-{i}"] = torch.linalg.norm(layer.weight.grad).item()
+                        # self._del_weight_norms[f"layer-{i}"].append(torch.linalg.norm(layer.weight.grad).item())
                     # d[f"layer-{i}"] = torch.linalg.norm(layer.grad).item()
                     i += 1
 
                 # normdf = pd.DataFrame(data=norms, columns=columns)
-                # normdf = pd.DataFrame(data=d, index=[self._h])
-                normdf = pd.DataFrame(self._del_weight_norms)
+                normdf = pd.DataFrame(data=d, index=[self._h])
+                # normdf = pd.DataFrame(self._del_weight_norms)
 
                 self._iter_counts['h'].append(self._h)
                 self._iter_counts['t'].append(t)
 
-                iterdf = pd.DataFrame(self._iter_counts)
+                iter_count = {
+                    'h' = self._h,
+                    't' = t
+                }
+
+                # iterdf = pd.DataFrame(self._iter_counts)
+                iterdf = pd.DataFrame(iter_count)
 
                 # debug
                 # pd.set_option('display.max_rows', 500)
                 # input(data)
 
-                data.to_csv(os.path.join(df_dir, f"data.csv"))
-                df.to_csv(os.path.join(df_dir, f"data-df.csv"))
-                normdf.to_csv(os.path.join(df_dir, f"delta_weight_norms.csv"))
-                iterdf.to_csv(os.path.join(df_dir, f"iters.csv"))
-                    # f"{working_home}/general-energy-nets/dfs/data-{self._h}.csv")
+                # data.to_csv(os.path.join(df_dir, f"data.csv"))
+                df_path = os.path.join(df_dir, f"data-df.csv")
+                df.to_csv(df_path, mode="a", header=not os.path.exists(df_path))
+
+                normdf_path = os.path.join(df_dir, f"delta_weight_norms.csv")
+                normdf.to_csv(normdf_path, mode="a", header=not os.path.exists(normdf_path))
+                
+                iterdf_path = os.path.join(df_dir, f"iters.csv")
+                iterdf.to_csv(iterdf_path, mode="a", header=not os.path.exists(iterdf_path))
                 
 
 

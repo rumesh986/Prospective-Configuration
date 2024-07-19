@@ -20,16 +20,16 @@ config:
 
     seed: 698841058
 
-    dataset: FashionMNIST
+    dataset: MNIST
     targets: "[1,8]"
 
     batch_size: 1
 
-    num_batch_per_iteration: 10
-    num_test: 10
+    num_batch_per_iteration: 100
+    num_test: 100
 
-    num_test_per_target: 10
-    num_train_per_target: 10
+    num_test_per_target: 100
+    num_train_per_target: 100
 
     before_DatasetLearningTrainable_setup_code: |-
         def data_loader_fn(dataset, train, batch_size, targets, num):
@@ -167,6 +167,13 @@ config:
             def loss_fn(outputs, target):
                 return (outputs - target).pow(2).sum() * 0.5
             
+            def loss_fn_dummy(outputs, target):
+                return torch.tensor(1)
+
+            def loss_fn_trial(outputs, target):
+                out = outputs.detach().clone()
+                return (out - target).pow(2).sum() * 0.5
+            
 
             def callback(t, selftest):
                 print(f"##### t: {t} ######")
@@ -179,6 +186,8 @@ config:
             self.pc_trainer.train_on_batch(
                 data, 
                 loss_fn, 
+                # loss_fn_dummy,
+                # loss_fn_trial, 
                 loss_fn_kwargs={'target': target},
                 # callback_after_backward=callback,
                 # callback_after_backward_kwargs={'selftest': self},

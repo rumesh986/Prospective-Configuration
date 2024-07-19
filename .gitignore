@@ -187,3 +187,5 @@ experiments/nature_coin_fig3_new/base-train-fc-best_fit.pkl
 # custom changes
 data/
 general-energy-nets/
+data_processing
+matlab.m
